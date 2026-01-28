@@ -1,271 +1,380 @@
 """
-Julie Assistant - AI Voice Assistant Frontend
-Production-ready Streamlit application for insurance use case
+Julie Assistant - AI Insurance Voice Assistant
+Sprint 2: Professional pitch-ready interface with voice playback and recording
 """
 
 import streamlit as st
 import requests
-from io import BytesIO
-import os
+import random
+from datetime import datetime, timedelta
+import io
 
-# =============================================================================
+# ============================================================================
 # CONFIGURATION
-# =============================================================================
+# ============================================================================
 
-BACKEND_URL = "http://localhost:8000/process"
-UPLOAD_FOLDER = "temp_audio"
+BACKEND_URL = "http://127.0.0.1:8000/process"
+APP_TITLE = "Julie Assistant"
+APP_SUBTITLE = "Assistante Vocale Intelligente pour l'Assurance"
 
-# Create temp folder if it doesn't exist
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# ============================================================================
+# MOCK DATA GENERATION
+# ============================================================================
 
-# =============================================================================
-# PAGE CONFIGURATION
-# =============================================================================
+def generate_mock_client_data():
+    """Generate realistic mock client data for demo purposes"""
+    first_names = ["Sophie", "Jean", "Marie", "Pierre", "Isabelle", "Thomas", "Nathalie", "Laurent"]
+    last_names = ["Martin", "Bernard", "Dubois", "Thomas", "Robert", "Petit", "Durand", "Leroy"]
+    
+    client_data = {
+        "nom_complet": f"{random.choice(first_names)} {random.choice(last_names)}",
+        "numero_police": f"POL-{random.randint(100000, 999999)}",
+        "id_sinistre": f"SIN-{random.randint(10000, 99999)}",
+        "type_assurance": random.choice(["Auto", "Habitation", "Santé", "Vie"]),
+        "date_souscription": (datetime.now() - timedelta(days=random.randint(365, 1825))).strftime("%d/%m/%Y"),
+        "statut": random.choice(["Actif", "En cours de traitement", "À renouveler"])
+    }
+    return client_data
 
-st.set_page_config(
-    page_title="Julie Assistant",
-    page_icon="🎙️",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
-
-# =============================================================================
-# CUSTOM CSS
-# =============================================================================
-
-st.markdown("""
-    <style>
-    .main-title {
-        text-align: center;
-        color: #1f77b4;
-        font-size: 3rem;
-        font-weight: bold;
-        margin-bottom: 2rem;
-    }
-    .result-container {
-        background-color: #f0f2f6;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-    }
-    .result-label {
-        font-weight: bold;
-        font-size: 1.2rem;
-        margin-bottom: 0.5rem;
-    }
-    .result-content {
-        font-size: 1rem;
-        line-height: 1.6;
-    }
-    .status-badge {
-        display: inline-block;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-weight: bold;
-        font-size: 1rem;
-    }
-    .status-sinistre {
-        background-color: #ff6b6b;
-        color: white;
-    }
-    .status-faq {
-        background-color: #4ecdc4;
-        color: white;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# =============================================================================
+# ============================================================================
 # HELPER FUNCTIONS
-# =============================================================================
+# ============================================================================
 
-def send_audio_to_backend(audio_file):
+def get_mime_type(filename):
+    """Detect MIME type from filename extension"""
+    ext = filename.lower().split('.')[-1]
+    mime_types = {
+        'wav': 'audio/wav',
+        'mp3': 'audio/mpeg',
+        'm4a': 'audio/mp4',
+        'ogg': 'audio/ogg',
+        'webm': 'audio/webm'
+    }
+    return mime_types.get(ext, 'audio/wav')
+
+# ============================================================================
+# UI COMPONENTS
+# ============================================================================
+
+def display_header():
+    """Display application header with branding"""
+    st.markdown(
+        """
+        <style>
+        .main-header {
+            background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
+            padding: 2rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .main-header h1 {
+            color: white;
+            margin: 0;
+            font-size: 2.5rem;
+        }
+        .main-header p {
+            color: #e0e7ff;
+            margin: 0.5rem 0 0 0;
+            font-size: 1.1rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    st.markdown(
+        f"""
+        <div class="main-header">
+            <h1>🎙️ {APP_TITLE}</h1>
+            <p>{APP_SUBTITLE}</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+def display_client_card(client_data):
+    """Display professional client information card"""
+    st.markdown(
+        """
+        <style>
+        .client-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .client-card h3 {
+            color: #1e3a8a;
+            margin-top: 0;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #4b5563;
+        }
+        .info-value {
+            color: #1f2937;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .status-actif {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .status-traitement {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .status-renouveler {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    status_class = "status-actif"
+    if "traitement" in client_data["statut"].lower():
+        status_class = "status-traitement"
+    elif "renouveler" in client_data["statut"].lower():
+        status_class = "status-renouveler"
+    
+    st.markdown(
+        f"""
+        <div class="client-card">
+            <h3>📋 Dossier Client</h3>
+            <div class="info-row">
+                <span class="info-label">👤 Client:</span>
+                <span class="info-value">{client_data["nom_complet"]}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">🔢 N° Police:</span>
+                <span class="info-value">{client_data["numero_police"]}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">📄 ID Sinistre:</span>
+                <span class="info-value">{client_data["id_sinistre"]}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">🛡️ Type:</span>
+                <span class="info-value">{client_data["type_assurance"]}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">📅 Souscription:</span>
+                <span class="info-value">{client_data["date_souscription"]}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">✅ Statut:</span>
+                <span class="info-value">
+                    <span class="status-badge {status_class}">{client_data["statut"]}</span>
+                </span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+def display_response_section(transcription, response_ia, audio_url):
+    """Display transcription, AI response, and audio player"""
+    
+    st.markdown("### 🎤 Transcription")
+    st.info(transcription if transcription else "Aucune transcription disponible")
+    
+    st.markdown("---")
+    
+    st.markdown("### 💬 Réponse de Julie")
+    st.success(response_ia if response_ia else "Aucune réponse disponible")
+    
+    if audio_url:
+        st.markdown("### 🔊 Réponse Vocale")
+        try:
+            if audio_url.startswith("http://") or audio_url.startswith("https://"):
+                audio_response = requests.get(audio_url, timeout=10)
+                
+                if audio_response.status_code == 200:
+                    st.audio(audio_response.content, format="audio/wav", autoplay=True)
+                    st.caption("🎵 Audio en cours de lecture automatique")
+                else:
+                    st.warning("⚠️ Audio non disponible (erreur serveur)")
+            else:
+                with open(audio_url, "rb") as f:
+                    st.audio(f.read(), format="audio/wav", autoplay=True)
+                    st.caption("🎵 Audio en cours de lecture automatique")
+        except requests.exceptions.RequestException as e:
+            st.warning(f"⚠️ Impossible de charger l'audio: {str(e)}")
+        except FileNotFoundError:
+            st.warning(f"⚠️ Fichier audio introuvable: {audio_url}")
+        except Exception as e:
+            st.warning(f"⚠️ Erreur audio: {str(e)}")
+    else:
+        st.warning("⚠️ Aucun audio disponible")
+
+def send_audio_to_backend(audio_data, filename="audio.wav"):
     """
-    Send audio file to FastAPI backend
-    
-    Args:
-        audio_file: Audio file (UploadedFile or bytes)
-    
-    Returns:
-        dict: JSON response from backend
-    
-    Raises:
-        requests.exceptions.RequestException: If request fails
+    Send audio file to backend for processing
+    Returns: dict with transcription, reponse_ia, and audio_url
     """
     try:
-        # Prepare file for upload
-        files = {"file": ("audio.wav", audio_file, "audio/wav")}
+        mime_type = get_mime_type(filename)
         
-        # Send POST request
+        audio_buffer = io.BytesIO(audio_data)
+        audio_buffer.name = filename
+        
+        files = {
+            "file": (
+                filename,
+                audio_buffer,
+                mime_type
+            )
+        }
+        
         response = requests.post(BACKEND_URL, files=files, timeout=30)
         
-        # Raise exception for bad status codes
-        response.raise_for_status()
-        
-        # Return JSON response
-        return response.json()
-    
-    except requests.exceptions.ConnectionError:
-        raise Exception("❌ Impossible de se connecter au serveur backend. Assurez-vous qu'il est démarré sur http://localhost:8000")
-    
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"❌ Erreur backend (code {response.status_code}): {response.text}")
+            return None
+            
     except requests.exceptions.Timeout:
-        raise Exception("⏱️ Le serveur a mis trop de temps à répondre. Veuillez réessayer.")
-    
-    except requests.exceptions.HTTPError as e:
-        raise Exception(f"❌ Erreur serveur (HTTP {response.status_code}): {str(e)}")
-    
+        st.error("❌ Délai d'attente dépassé. Le serveur ne répond pas.")
+        return None
+    except requests.exceptions.ConnectionError:
+        st.error("❌ Impossible de se connecter au serveur. Vérifiez que le backend est démarré.")
+        return None
     except Exception as e:
-        raise Exception(f"❌ Erreur inattendue: {str(e)}")
+        st.error(f"❌ Erreur inattendue: {str(e)}")
+        return None
 
-
-def validate_response(response_data):
-    """
-    Validate backend response structure
-    
-    Args:
-        response_data: JSON response from backend
-    
-    Returns:
-        bool: True if valid, raises Exception otherwise
-    """
-    required_keys = ["transcription", "reponse_ia", "statut"]
-    
-    for key in required_keys:
-        if key not in response_data:
-            raise Exception(f"❌ Réponse invalide du serveur: clé '{key}' manquante")
-    
-    return True
-
-
-def display_results(response_data):
-    """
-    Display results in a formatted way
-    
-    Args:
-        response_data: JSON response from backend
-    """
-    # Transcription section
-    st.markdown("### 📝 Transcription")
-    st.markdown(f"""
-        <div class="result-container">
-            <div class="result-content">{response_data['transcription']}</div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # AI Response section
-    st.markdown("### 🤖 Réponse IA")
-    st.markdown(f"""
-        <div class="result-container">
-            <div class="result-content">{response_data['reponse_ia']}</div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # Status section
-    st.markdown("### 📌 Statut")
-    status = response_data['statut'].lower()
-    status_class = "status-sinistre" if status == "sinistre" else "status-faq"
-    status_display = status.upper()
-    
-    st.markdown(f"""
-        <div class="result-container">
-            <span class="status-badge {status_class}">{status_display}</span>
-        </div>
-    """, unsafe_allow_html=True)
-
-
-# =============================================================================
+# ============================================================================
 # MAIN APPLICATION
-# =============================================================================
+# ============================================================================
 
 def main():
-    """Main application function"""
+    """Main application logic"""
     
-    # Title
-    st.markdown('<h1 class="main-title">🎙️ Julie Assistant</h1>', unsafe_allow_html=True)
-    st.markdown("---")
+    st.set_page_config(
+        page_title=APP_TITLE,
+        page_icon="🎙️",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
     
-    # Introduction
-    st.markdown("""
-        Bienvenue sur **Julie Assistant**, votre assistant vocal intelligent pour l'assurance.
-        
-        **Instructions:**
-        1. Téléchargez un fichier audio `.wav` ou enregistrez votre voix
-        2. Cliquez sur "Envoyer" pour obtenir une réponse
-    """)
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-color: #f9fafb;
+        }
+        .uploadedFile {
+            border: 2px dashed #3b82f6;
+            border-radius: 10px;
+            padding: 1rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
     
-    st.markdown("---")
+    display_header()
     
-    # Audio input section
-    st.markdown("### 🎤 Entrée Audio")
+    if "client_data" not in st.session_state:
+        st.session_state.client_data = generate_mock_client_data()
     
-    # Create tabs for upload and recording
-    tab1, tab2 = st.tabs(["📁 Télécharger un fichier", "🎙️ Enregistrer"])
+    col1, col2 = st.columns([2, 1])
     
-    audio_file = None
-    
-    with tab1:
-        uploaded_file = st.file_uploader(
-            "Sélectionnez un fichier audio (.wav)",
-            type=["wav"],
-            help="Téléchargez un fichier audio au format WAV"
-        )
-        if uploaded_file is not None:
-            audio_file = uploaded_file
-            st.audio(uploaded_file, format="audio/wav")
-    
-    with tab2:
-        recorded_audio = st.audio_input("Enregistrez votre message")
-        if recorded_audio is not None:
-            audio_file = recorded_audio
-            st.success("✅ Audio enregistré avec succès!")
-    
-    st.markdown("---")
-    
-    # Send button
-    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        send_button = st.button("🚀 Envoyer", use_container_width=True, type="primary")
+        display_client_card(st.session_state.client_data)
+        
+        if st.button("🔄 Nouveau Client", use_container_width=True):
+            st.session_state.client_data = generate_mock_client_data()
+            st.rerun()
     
-    # Process audio when button is clicked
-    if send_button:
-        if audio_file is None:
-            st.error("⚠️ Veuillez d'abord télécharger ou enregistrer un fichier audio.")
+    with col1:
+        st.markdown("### 📤 Envoi Audio")
+        
+        input_method = st.radio(
+            "Choisissez une méthode:",
+            ["🎙️ Enregistrer un audio", "📁 Télécharger un fichier audio"],
+            horizontal=True
+        )
+        
+        audio_data = None
+        audio_filename = "audio.wav"
+        
+        if input_method == "🎙️ Enregistrer un audio":
+            recorded_audio = st.audio_input("Cliquez pour enregistrer")
+            if recorded_audio is not None:
+                audio_data = recorded_audio.getvalue()
+                audio_filename = recorded_audio.name if hasattr(recorded_audio, 'name') else "recorded_audio.wav"
         else:
-            # Show loading spinner
-            with st.spinner("🔄 Traitement en cours... Veuillez patienter."):
-                try:
-                    # Reset audio_file pointer to beginning
-                    audio_file.seek(0)
+            uploaded_file = st.file_uploader(
+                "Sélectionnez un fichier audio",
+                type=["wav", "mp3", "m4a", "ogg"],
+                help="Formats acceptés: WAV, MP3, M4A, OGG"
+            )
+            if uploaded_file is not None:
+                audio_data = uploaded_file.getvalue()
+                audio_filename = uploaded_file.name
+        
+        if audio_data is not None:
+            if st.button("🚀 Envoyer à Julie", type="primary", use_container_width=True):
+                with st.spinner("🤔 Julie réfléchit..."):
+                    result = send_audio_to_backend(audio_data, audio_filename)
                     
-                    # Send audio to backend
-                    response_data = send_audio_to_backend(audio_file)
-                    
-                    # Validate response
-                    validate_response(response_data)
-                    
-                    # Display success message
-                    st.success("✅ Traitement terminé avec succès!")
-                    
-                    st.markdown("---")
-                    
-                    # Display results
-                    display_results(response_data)
-                    
-                except Exception as e:
-                    st.error(str(e))
+                    if result:
+                        st.session_state.result = result
+                        st.success("✅ Traitement terminé!")
+                        st.rerun()
     
-    # Footer
     st.markdown("---")
-    st.markdown("""
-        <div style="text-align: center; color: #666; font-size: 0.9rem;">
-            Julie Assistant v1.0 | Powered by AI
+    
+    if "result" in st.session_state and st.session_state.result:
+        result = st.session_state.result
+        display_response_section(
+            transcription=result.get("transcription", ""),
+            response_ia=result.get("reponse_ia", ""),
+            audio_url=result.get("audio_url", "")
+        )
+    else:
+        st.markdown(
+            """
+            <div style="text-align: center; padding: 3rem; color: #6b7280;">
+                <h3>👆 Enregistrez ou téléchargez un fichier audio pour commencer</h3>
+                <p>Julie est prête à vous assister avec vos questions d'assurance</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style="text-align: center; color: #6b7280; padding: 1rem;">
+            <small>Julie Assistant v2.0 | Sprint 2 - Demo Ready | © 2026</small>
         </div>
-    """, unsafe_allow_html=True)
-
-
-# =============================================================================
-# ENTRY POINT
-# =============================================================================
+        """,
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
